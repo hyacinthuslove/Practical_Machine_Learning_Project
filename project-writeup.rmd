@@ -1,0 +1,110 @@
+---
+title: "Project Writeup for Practical Machine Learning"
+author: "Peggy Ong"
+date: "Thursday, December 18, 2014"
+output: html_document
+---
+
+Loading the libraries.
+```{r,warning=FALSE,message=FALSE}
+library(caret)
+library(nnet)
+```
+
+ 
+Read Train and Score datasets. Get accelerometers data on the belt, forearm, 
+arm, and dumbell of 6 participants.
+```{r}
+train_data <- read.csv('pml-training.csv',header = TRUE)
+test_data <- read.csv('pml-testing.csv',header = TRUE)
+
+train_data <- train_data[,c(grep(x = names(train_data),pattern = "^accel_"),160)]
+sum(complete.cases(train_data)); dim(train_data)
+
+test_data <- test_data[,c(grep(x = names(test_data),pattern = "^accel_"),160)]
+sum(complete.cases(test_data)); dim(test_data)
+```
+
+ 
+Create data partitions to validate the models created. 70% of train data assign
+to train partition and the remaining 30% to test partition.
+```{r}
+set.seed(888)
+trainIndex <- createDataPartition(train_data$classe, p = .7,list = FALSE,
+                                  times = 1)
+
+train_partition <- train_data[trainIndex, ]
+test_partition <- train_data[-trainIndex, ]
+
+sapply(train_partition, sd)
+sapply(test_partition, sd)
+sapply(test_data, sd)
+```
+ 
+ Set the Formula 
+```{r}
+theTarget <- "classe"
+theFormula <- as.formula(paste("as.factor(",theTarget, ") ~ . "))
+trainTarget = train_partition[,which(names(train_partition)==theTarget)] 
+testTarget  = test_partition[,which(names(test_partition)==theTarget)]
+
+```
+ 
+  
+ As outcome is categorical with > 2 levels i.e. A, B, C, D or E, I use 
+ multinomial logit model.
+```{r}
+multi_Model <- multinom(theFormula, data=train_partition)
+
+train_pred <- predict(multi_Model, train_partition)
+test_pred <- predict(multi_Model, test_partition)
+```
+ 
+ Display the confusion matrix results for train partition (multinomial).
+```{r}
+confusionMatrix(train_pred, trainTarget)
+```
+ 
+ Display the confusion matrix results for test partition (multinomial).
+```{r}
+confusionMatrix(test_pred, testTarget)
+```
+ 
+ Both Train and Test partitions under multinomial achieved only 50% accuracy. 
+ That means in-sample error is very high at about 50%. 
+ Using the test partition, we see that out-of-sample error  
+ (model was not trained with this partition) is also high at 
+ (1-0.5072)*100 = 49.28%.
+ 20 Test Cases are predicted with multinomial model achieved only 13/20 correct 
+ in the submission.
+```{r}
+predict(multi_Model, test_data)
+```
+ 
+ Now, I try Generalized Boosted Regression Modeling (GBM) to see if better 
+ results can be achieved.
+```{r,message=FALSE, warning=FALSE}
+gbm_Model <- train(theFormula, method="gbm", data=train_partition)
+
+train_pred <- predict(gbm_Model, train_partition)
+test_pred <- predict(gbm_Model, test_partition)
+```
+
+ Display the confusion matrix results for train partition (GBM).
+```{r}
+confusionMatrix(train_pred, trainTarget)
+```
+ 
+ Display the confusion matrix results for test partition (GBM).
+```{r}
+confusionMatrix(test_pred, testTarget)
+```
+ 
+ Both Train and Test partitions fitted with GBM algorithm achieved > 80% 
+ accuracy! :) 
+ That means in-sample error is much lower compared to Multinomial model.
+ Out-of-sample error is also much lower at (1-0.8209)*100 = 17.91%.
+ However, 20 Test Cases predicted with GBM model achieved only 14/20 correct.
+```{r}
+predict(gbm_Model, test_data)
+```
